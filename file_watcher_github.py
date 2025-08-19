@@ -5,10 +5,11 @@ File Watcher GitHub Committer
 A script that watches a folder for new files and automatically commits them to a GitHub repository.
 
 Usage:
-    python file_watcher_github.py <folder_path> <github_token> <repo_url>
+    python file_watcher_github.py <folder_path> <repo_url>
+    python file_watcher_github.py <folder_path> <repo_url> --token <github_token>
 
 Example:
-    python file_watcher_github.py /path/to/watch ghp_1234567890abcdef https://github.com/username/repo.git
+    python file_watcher_github.py /path/to/watch https://github.com/username/repo.git
 """
 
 import os
@@ -22,6 +23,21 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import git
 from git import Repo, InvalidGitRepositoryError
+
+# =============================================================================
+# CONFIGURATION SECTION - SECURE TOKEN HANDLING
+# =============================================================================
+
+# Option 1: Environment variable (recommended for PyCharm and development)
+ENV_VAR_NAME = "REPO_TOKEN"
+
+# Option 2: Config file path (secure local storage)
+CONFIG_FILE = ".github_config"
+
+# NOTE: Do not embed tokens directly in this file as it's a public repository!
+# Use environment variables or config files instead.
+
+# =============================================================================
 
 
 class GitHubFileHandler(FileSystemEventHandler):
@@ -141,7 +157,47 @@ class GitHubFileHandler(FileSystemEventHandler):
             self.logger.error(f"Failed to push to remote: {e}")
 
 
-def validate_inputs(folder_path, github_token, repo_url):
+def get_github_token(provided_token=None):
+    """Get GitHub token from various sources in order of preference."""
+    
+    # 1. Command line argument (highest priority)
+    if provided_token:
+        return provided_token
+    
+    # 2. Environment variable
+    env_token = os.getenv(ENV_VAR_NAME)
+    if env_token:
+        print(f"✅ Using GitHub token from environment variable: {ENV_VAR_NAME}")
+        return env_token
+    
+    # 3. Config file
+    config_path = Path(CONFIG_FILE)
+    if config_path.exists():
+        try:
+            token = config_path.read_text().strip()
+            if token:
+                print(f"✅ Using GitHub token from config file: {CONFIG_FILE}")
+                return token
+        except Exception as e:
+            print(f"⚠️  Could not read config file {CONFIG_FILE}: {e}")
+    
+    # No token found
+    return None
+
+
+def create_config_file(token):
+    """Create a config file with the GitHub token."""
+    config_path = Path(CONFIG_FILE)
+    try:
+        config_path.write_text(token)
+        config_path.chmod(0o600)  # Restrict file permissions
+        print(f"✅ GitHub token saved to config file: {CONFIG_FILE}")
+        print("⚠️  Remember to add this file to your .gitignore!")
+    except Exception as e:
+        print(f"❌ Failed to create config file: {e}")
+
+
+def validate_inputs(folder_path, repo_url):
     """Validate input parameters."""
     # Check if folder exists
     if not Path(folder_path).exists():
@@ -149,10 +205,6 @@ def validate_inputs(folder_path, github_token, repo_url):
     
     if not Path(folder_path).is_dir():
         raise ValueError(f"Path is not a directory: {folder_path}")
-    
-    # Basic validation for GitHub token
-    if not github_token or len(github_token) < 10:
-        raise ValueError("Invalid GitHub token provided")
     
     # Basic validation for repository URL
     if not any(pattern in repo_url for pattern in ['github.com', 'github']):
@@ -168,28 +220,62 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python file_watcher_github.py /path/to/watch ghp_1234567890abcdef https://github.com/user/repo.git
-  python file_watcher_github.py ./documents ghp_abcdef1234567890 git@github.com:user/private-repo.git
+  # Use embedded token or environment variable
+  python file_watcher_github.py /path/to/watch https://github.com/user/repo.git
+  
+  # Provide token explicitly
+  python file_watcher_github.py /path/to/watch https://github.com/user/repo.git --token ghp_1234567890abcdef
+  
+  # Save token to config file
+  python file_watcher_github.py --save-token ghp_1234567890abcdef
+  
+Environment Variable:
+  export REPO_TOKEN="your_token_here"
+  python file_watcher_github.py /path/to/watch https://github.com/user/repo.git
         """
     )
     
-    parser.add_argument('folder_path', help='Path to the folder to watch')
-    parser.add_argument('github_token', help='GitHub personal access token')
-    parser.add_argument('repo_url', help='GitHub repository URL (HTTPS or SSH)')
+    parser.add_argument('folder_path', nargs='?', help='Path to the folder to watch')
+    parser.add_argument('repo_url', nargs='?', help='GitHub repository URL (HTTPS or SSH)')
+    parser.add_argument('--token', '-t', help='GitHub personal access token (optional if embedded or in env)')
+    parser.add_argument('--save-token', help='Save GitHub token to config file and exit')
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
     
     args = parser.parse_args()
+    
+    # Handle token saving
+    if args.save_token:
+        create_config_file(args.save_token)
+        return
+    
+    # Validate required arguments
+    if not args.folder_path or not args.repo_url:
+        parser.error("folder_path and repo_url are required unless using --save-token")
     
     # Set logging level
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     
     try:
-        # Validate inputs
-        validate_inputs(args.folder_path, args.github_token, args.repo_url)
+        # Get GitHub token from various sources
+        github_token = get_github_token(args.token)
+        if not github_token:
+            print("❌ No GitHub token found!")
+            print("\nPlease provide a token using one of these methods:")
+            print("1. Set environment variable: export REPO_TOKEN='your_token'")
+            print("2. Create config file: python file_watcher_github.py --save-token your_token")
+            print("3. Provide as argument: python file_watcher_github.py folder repo --token your_token")
+            sys.exit(1)
+        
+        # Validate token
+        if len(github_token) < 10:
+            raise ValueError("Invalid GitHub token provided")
+        
+        # Validate other inputs
+        validate_inputs(args.folder_path, args.repo_url)
         
         # Setup file watcher
-        event_handler = GitHubFileHandler(args.folder_path, args.github_token, args.repo_url)
+        event_handler = GitHubFileHandler(args.folder_path, github_token, args.repo_url)
         observer = Observer()
         observer.schedule(event_handler, args.folder_path, recursive=True)
         
