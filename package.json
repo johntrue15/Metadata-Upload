@@ -1,0 +1,16 @@
+{
+  "name": "metadata-upload",
+  "version": "1.0.0",
+  "private": true,
+  "description": "X-ray metadata upload — folder watchers that auto-commit to GitHub",
+  "scripts": {
+    "openclaw": "openclaw agent",
+    "openclaw:gateway": "openclaw gateway --port 18789 --verbose"
+  },
+  "devDependencies": {
+    "openclaw": "latest"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

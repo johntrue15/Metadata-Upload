@@ -1,0 +1,35 @@
+# Tokens / secrets (never commit)
+.github_config
+.env
+.env.local
+*.token
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code (local overrides; project .claude/settings.json is committed)
+.claude/settings.local.json
+.claude/*.local.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# OpenClaw (local config if ever stored in repo)
+.openclaw.local.json
+
+# Node (optional — for npm run openclaw)
+node_modules/

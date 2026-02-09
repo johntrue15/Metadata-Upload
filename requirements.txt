@@ -1,0 +1,5 @@
+# Metadata-Upload — Python dependencies
+# auto_commit_watcher.py: stdlib only (no extra deps)
+# file_watcher_github.py & network_file_watcher_github.py:
+watchdog>=4.0.0
+GitPython>=3.1.0
